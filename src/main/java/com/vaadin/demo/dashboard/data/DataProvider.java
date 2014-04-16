@@ -64,7 +64,7 @@ public class DataProvider {
         public final String synopsis;
         public final String thumbUrl;
         public final String posterUrl;
-        /** In minutes */
+        /** Duration in minutes */
         public final int duration;
         public Date releaseDate = null;
 
@@ -152,14 +152,14 @@ public class DataProvider {
                 json = readJsonFromFile(cache);
             } else {
                 // Get an API key from http://developer.rottentomatoes.com
-                String apiKey = "xxxxxxxxxxxxxxxxxxx";
+                String apiKey = System.getProperty("rottentomatoes_apikey", "xxxxxxxxxxxxxxxxxxx");
                 json = readJsonFromUrl("http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters.json?page_limit=30&apikey=" + apiKey);
                 // Store in cache
                 FileWriter fileWriter = new FileWriter(cache);
                 fileWriter.write(json.toString());
                 fileWriter.close();
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
