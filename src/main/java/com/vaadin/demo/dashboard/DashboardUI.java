@@ -10,10 +10,6 @@
 
 package com.vaadin.demo.dashboard;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Locale;
-
 import com.vaadin.annotations.Theme;
 import com.vaadin.annotations.Title;
 import com.vaadin.demo.dashboard.data.DataProvider;
@@ -54,6 +50,9 @@ import com.vaadin.ui.Table;
 import com.vaadin.ui.TextField;
 import com.vaadin.ui.UI;
 import com.vaadin.ui.VerticalLayout;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Locale;
 
 @Theme("dashboard")
 @Title("QuickTickets Dashboard")
@@ -80,7 +79,7 @@ public class DashboardUI extends UI {
         }
     };
 
-    HashMap<String, Button> viewNameToMenuButton = new HashMap<String, Button>();
+    HashMap<String, Button> viewNameToMenuButton = new HashMap<>();
 
     private Navigator nav;
 
@@ -217,9 +216,9 @@ public class DashboardUI extends UI {
 
         nav = new Navigator(this, content);
 
-        for (String route : routes.keySet()) {
+        routes.keySet().stream().forEach((route) -> {
             nav.addView(route, routes.get(route));
-        }
+        });
 
         helpManager.closeAll();
         removeStyleName("login");
@@ -272,13 +271,8 @@ public class DashboardUI extends UI {
                                 userName.setSizeUndefined();
                                 addComponent(userName);
 
-                                Command cmd = new Command() {
-                                    @Override
-                                    public void menuSelected(
-                                            MenuItem selectedItem) {
-                                        Notification
-                                                .show("Not implemented in this demo");
-                                    }
+                                Command cmd = (MenuItem selectedItem) -> {
+                                    Notification.show("Not implemented in this demo");
                                 };
                                 MenuBar settings = new MenuBar();
                                 MenuItem settingsMenu = settings.addItem("",
