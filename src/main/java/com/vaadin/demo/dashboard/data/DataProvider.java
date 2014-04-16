@@ -10,6 +10,14 @@
 
 package com.vaadin.demo.dashboard.data;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.vaadin.data.Item;
+import com.vaadin.data.util.IndexedContainer;
+import com.vaadin.server.VaadinRequest;
+import com.vaadin.util.CurrentInstance;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -30,15 +38,6 @@ import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
-
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.vaadin.data.Item;
-import com.vaadin.data.util.IndexedContainer;
-import com.vaadin.server.VaadinRequest;
-import com.vaadin.util.CurrentInstance;
 
 public class DataProvider {
 
@@ -371,6 +370,12 @@ public class DataProvider {
     }
 
     private void createTransaction(Calendar cal) {
+        
+        if(movies.isEmpty()) {
+            // nothing to do
+            return;
+        }
+ 
         // Country
         Object[] array = countryToCities.keySet().toArray();
         int i = (int) (Math.random() * (array.length - 1));
