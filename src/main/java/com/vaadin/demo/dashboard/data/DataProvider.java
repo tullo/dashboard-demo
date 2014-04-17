@@ -24,7 +24,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.Reader;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.text.ParseException;
@@ -90,8 +89,9 @@ public class DataProvider {
 
     /**
      * Initialize the data for this application.
+     * @throws java.io.IOException
      */
-    public DataProvider() {
+    public DataProvider() throws IOException {
         reseed();
         loadMoviesData();
         loadTheaterData();
@@ -199,9 +199,9 @@ public class DataProvider {
                 String apiKey = System.getProperty("rottentomatoes_apikey", "xxxxxxxxxxxxxxxxxxx");
                 json = readJsonFromUrl("http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters.json?page_limit=30&apikey=" + apiKey);
                 // Store in cache
-                FileWriter fileWriter = new FileWriter(cache);
-                fileWriter.write(json.toString());
-                fileWriter.close();
+                try (FileWriter fileWriter = new FileWriter(cache)) {
+                    fileWriter.write(json.toString());
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -231,34 +231,27 @@ public class DataProvider {
     }
 
     /* JSON utility method */
-    private static String readAll(Reader rd) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        int cp;
-        while ((cp = rd.read()) != -1) {
-            sb.append((char) cp);
-        }
-        return sb.toString();
-    }
-
-    /* JSON utility method */
     private static JsonObject readJsonFromUrl(String url) throws IOException {
-        InputStream is = new URL(url).openStream();
-        try {
-            BufferedReader rd = new BufferedReader(new InputStreamReader(is,
-                    Charset.forName("UTF-8")));
-            String jsonText = readAll(rd);
-            JsonElement jelement = new JsonParser().parse(jsonText);
-            JsonObject jobject = jelement.getAsJsonObject();
-            return jobject;
-        } finally {
-            is.close();
+        
+        StringBuilder jsonText = new StringBuilder(2000);
+        try ( // try-with-resources
+            InputStream is = new URL(url).openStream();
+            InputStreamReader isr = new InputStreamReader(is, Charset.forName("UTF-8"))
+            BufferedReader reader = new BufferedReader(isr)
+        ) {
+            reader.lines().forEach(line -> jsonText.append(line));
         }
+        JsonElement jelement = new JsonParser().parse(jsonText);
+        JsonObject jobject = jelement.getAsJsonObject();
+        return jobject;
     }
 
     /* JSON utility method */
     private static JsonObject readJsonFromFile(File path) throws IOException {
-        BufferedReader rd = new BufferedReader(new FileReader(path));
-        String jsonText = readAll(rd);
+        StringBuilder jsonText = new StringBuilder(2000);
+        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
+            reader.lines().forEach(line -> fileData.append(line));
+        }
         JsonElement jelement = new JsonParser().parse(jsonText);
         JsonObject jobject = jelement.getAsJsonObject();
         return jobject;
@@ -267,25 +260,17 @@ public class DataProvider {
     /**
      * Parse the list of countries and cities
      */
-    private static HashMap<String, ArrayList<String>> loadTheaterData() {
+    private static HashMap<String, ArrayList<String>> loadTheaterData() throws IOException {
 
         /* First, read the text file into a string */
-        StringBuilder fileData = new StringBuilder(2000);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(
-                DataProvider.class.getResourceAsStream("cities.txt")));
-
-        char[] buf = new char[1024];
-        int numRead = 0;
-        try {
-            while ((numRead = reader.read(buf)) != -1) {
-                String readData = String.valueOf(buf, 0, numRead);
-                fileData.append(readData);
-                buf = new char[1024];
-            }
-            reader.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        StringBuilder fileData = new StringBuilder(2000); 
+        try ( // try-with-resources
+            InputStream is = DataProvider.class.getResourceAsStream("cities.txt");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is))
+        ) {
+            reader.lines().forEach(line -> fileData.append(line));
         }
+        
         String list = fileData.toString();
 
         /*
