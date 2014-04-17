@@ -10,10 +10,6 @@
 
 package com.vaadin.demo.dashboard;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
 import com.vaadin.demo.dashboard.data.DataProvider;
 import com.vaadin.demo.dashboard.data.DataProvider.Movie;
 import com.vaadin.event.LayoutEvents.LayoutClickEvent;
@@ -57,11 +53,16 @@ import com.vaadin.ui.components.calendar.event.CalendarEvent;
 import com.vaadin.ui.components.calendar.event.CalendarEventProvider;
 import com.vaadin.ui.components.calendar.handler.BasicEventMoveHandler;
 import com.vaadin.ui.components.calendar.handler.BasicEventResizeHandler;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Random;
 
 public class ScheduleView extends CssLayout implements View {
 
-    private CssLayout catalog;
+    private final Random rand = new Random(1L);
 
+    private CssLayout catalog;
     private Window popup;
 
     // private CSSInject css;
@@ -217,8 +218,8 @@ public class ScheduleView extends CssLayout implements View {
             TableTransferable transferable) {
         Date start = details.getDropTime();
         Date end = details.getDropTime();
-        int endHour = (int) (1 + Math.round(Math.random()));
-        int endMinutes = (int) (45 + Math.random() * 30);
+        int endHour = (int) (1 + Math.round(rand.nextDouble()));
+        int endMinutes = 45 + rand.nextInt(30);
         end.setHours(end.getHours() + endHour);
         end.setMinutes(endMinutes);
         MovieEvent newEvent = new MovieEvent(details.getDropTime(), end,
@@ -279,7 +280,7 @@ public class ScheduleView extends CssLayout implements View {
             int i = -1;
             int reallyStupidStuffForCodeThatIDontReallyUnderStandWTFItIsDoing = 0;
             do {
-                i = (int) (Math.random() * movies.size());
+                i = rand.nextInt(movies.size());
                 if (!used[i]) {
                     used[i] = true;
                     break;
@@ -293,8 +294,8 @@ public class ScheduleView extends CssLayout implements View {
 
             Date start = new Date(date.getTime());
             Date end = new Date(start.getTime());
-            // int endHour = (int) (1 + Math.round(Math.random()));
-            // int endMinutes = (int) (45 + Math.random() * 30);
+            // int endHour = (int) (1 + Math.round(rand.nextDouble()));
+            // int endMinutes = 45 + rand.nextInt(30);
             // end.setHours(end.getHours() + endHour);
             end.setMinutes(end.getMinutes() + m.duration);
 
@@ -303,7 +304,7 @@ public class ScheduleView extends CssLayout implements View {
 
             date.setDate(end.getDate());
             date.setHours(end.getHours());
-            date.setMinutes((int) (end.getMinutes() + 15 + (Math.random() * 60)));
+            date.setMinutes((int) (end.getMinutes() + 15 + rand.nextInt(60)));
 
             if (date.getDate() > day.getDate())
                 break;

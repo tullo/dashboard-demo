@@ -1,13 +1,12 @@
 /**
  * DISCLAIMER
- * 
+ *
  * The quality of the code is such that you should not copy any of it as best
  * practice how to build Vaadin applications.
- * 
+ *
  * @author jouni@vaadin.com
- * 
+ *
  */
-
 package com.vaadin.demo.dashboard.data;
 
 import com.google.gson.JsonArray;
@@ -28,6 +27,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -41,12 +41,58 @@ import java.util.Random;
 
 public class DataProvider {
 
-    public static Random rand = new Random();
+    private static final Random rand = new Random();
+
+    /* List of movies playing currently in theaters */
+    private static final ArrayList<Movie> movies = new ArrayList<>();
+
+    /* List of countries and cities for them */
+    private static HashMap<String, ArrayList<String>> countryToCities = new HashMap<>();
+
+    /* List of theaters */
+    private static final List<String> theaters = new ArrayList<String>() {
+        {
+            add("Threater 1");
+            add("Threater 2");
+            add("Threater 3");
+            add("Threater 4");
+            add("Threater 5");
+            add("Threater 6");
+        }
+    };
+
+    /* List of rooms */
+    private static final List<String> rooms = new ArrayList<String>() {
+        {
+            add("Room 1");
+            add("Room 2");
+            add("Room 3");
+            add("Room 4");
+            add("Room 5");
+            add("Room 6");
+        }
+    };
+
+    /**
+     * =========================================================================
+     * Transactions data, used in tables and graphs
+     * =========================================================================
+     */
+
+    /* Container with all the transactions */
+    private TransactionsContainer transactions;
+    private static double totalSum = 0;
+
+    
+    public static void reseed() {
+        rand.setSeed(1L);
+    }
 
     /**
      * Initialize the data for this application.
      */
     public DataProvider() {
+        reseed();
         loadMoviesData();
         loadTheaterData();
         generateTransactionsData();
@@ -58,13 +104,16 @@ public class DataProvider {
      * =========================================================================
      */
 
-    /** Simple Movie class */
+    /* Simple Movie class */
     public static class Movie {
+
         public final String title;
         public final String synopsis;
         public final String thumbUrl;
         public final String posterUrl;
-        /** Duration in minutes */
+        /**
+         * Duration in minutes
+         */
         public final int duration;
         public Date releaseDate = null;
 
@@ -77,8 +126,8 @@ public class DataProvider {
             this.synopsis = synopsis;
             this.thumbUrl = thumbUrl;
             this.posterUrl = posterUrl;
-            this.duration = (int) ((1 + Math.round(Math.random())) * 60 + 45 + (Math
-                    .random() * 30));
+            this.duration = (int) ((1 + Math.round(rand.nextDouble())) * 60 + 45 + rand.nextInt(30));
+
             try {
                 String datestr = releaseDates.get("theater").getAsString();
                 SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd");
@@ -87,7 +136,7 @@ public class DataProvider {
                 sortScore = 0.6 / (0.01 + (System.currentTimeMillis() - releaseDate
                         .getTime()) / (1000 * 60 * 60 * 24 * 5));
                 sortScore += 10.0 / (101 - score);
-            } catch (Exception e) {
+            } catch (ParseException e) {
                 e.printStackTrace();
             }
 
@@ -109,14 +158,9 @@ public class DataProvider {
         }
     }
 
-    /*
-     * List of movies playing currently in theaters
-     */
-    private static ArrayList<Movie> movies = new ArrayList<Movie>();
-
     /**
      * Get a list of movies currently playing in theaters.
-     * 
+     *
      * @return a list of Movie objects
      */
     public static ArrayList<Movie> getMovies() {
@@ -148,7 +192,7 @@ public class DataProvider {
             // if no connection is available
             if (cache.exists()
                     && System.currentTimeMillis() < cache.lastModified() + 1000
-                            * 60 * 60 * 24) {
+                    * 60 * 60 * 24) {
                 json = readJsonFromFile(cache);
             } else {
                 // Get an API key from http://developer.rottentomatoes.com
@@ -180,7 +224,7 @@ public class DataProvider {
                                 "profile").getAsString(), posters.get(
                                 "detailed").getAsString(), movieJson.get(
                                 "release_dates").getAsJsonObject(), movieJson
-                                .get("ratings").getAsJsonObject());
+                        .get("ratings").getAsJsonObject());
                 movies.add(movie);
             }
         }
@@ -221,45 +265,12 @@ public class DataProvider {
     }
 
     /**
-     * =========================================================================
-     * Countries, cities, theaters and rooms
-     * =========================================================================
-     */
-
-    /* List of countries and cities for them */
-    static HashMap<String, ArrayList<String>> countryToCities = new HashMap<String, ArrayList<String>>();
-
-    static List<String> theaters = new ArrayList<String>() {
-        private static final long serialVersionUID = 1L;
-        {
-            add("Threater 1");
-            add("Threater 2");
-            add("Threater 3");
-            add("Threater 4");
-            add("Threater 5");
-            add("Threater 6");
-        }
-    };
-
-    static List<String> rooms = new ArrayList<String>() {
-        private static final long serialVersionUID = 1L;
-        {
-            add("Room 1");
-            add("Room 2");
-            add("Room 3");
-            add("Room 4");
-            add("Room 5");
-            add("Room 6");
-        }
-    };
-
-    /**
      * Parse the list of countries and cities
      */
     private static HashMap<String, ArrayList<String>> loadTheaterData() {
 
         /* First, read the text file into a string */
-        StringBuffer fileData = new StringBuffer(2000);
+        StringBuilder fileData = new StringBuilder(2000);
         BufferedReader reader = new BufferedReader(new InputStreamReader(
                 DataProvider.class.getResourceAsStream("cities.txt")));
 
@@ -281,38 +292,29 @@ public class DataProvider {
          * The list has rows with tab delimited values. We want the second (city
          * name) and last (country name) values, and build a Map from that.
          */
-        countryToCities = new HashMap<String, ArrayList<String>>();
+        countryToCities = new HashMap<>();
         for (String line : list.split("\n")) {
             String[] tabs = line.split("\t");
             String city = tabs[1];
             String country = tabs[tabs.length - 2];
 
             if (!countryToCities.containsKey(country)) {
-                countryToCities.put(country, new ArrayList<String>());
+                countryToCities.put(country, new ArrayList<>());
             }
             countryToCities.get(country).add(city);
         }
 
         return countryToCities;
-
     }
-
-    /**
-     * =========================================================================
-     * Transactions data, used in tables and graphs
-     * =========================================================================
-     */
-
-    /** Container with all the transactions */
-    private TransactionsContainer transactions;
 
     public TransactionsContainer getTransactions() {
         return transactions;
     }
 
-    /** Create a list of dummy transactions */
+    /* Create a list of dummy transactions */
     private void generateTransactionsData() {
         GregorianCalendar today = new GregorianCalendar();
+
         /*
          * Data items: timestamp, country, city, theater, room, movie title,
          * number of seats, price
@@ -344,12 +346,9 @@ public class DataProvider {
             createTransaction(c);
             // System.out.println(df.format(c.getTime()));
         }
-        transactions.sort(new String[] { "timestamp" }, new boolean[] { true });
+        transactions.sort(new String[]{"timestamp"}, new boolean[]{true});
         updateTotalSum();
-
     }
-
-    private static double totalSum = 0;
 
     private void updateTotalSum() {
         totalSum = 0;
@@ -358,11 +357,6 @@ public class DataProvider {
             Object value = item.getItemProperty("Price").getValue();
             totalSum += Double.parseDouble(value.toString());
         }
-        /*
-         * try { Number amount = NumberFormat.getCurrencyInstance().parse( "$" +
-         * totalSum); totalSum = amount.doubleValue(); } catch (ParseException
-         * e) { e.printStackTrace(); }
-         */
     }
 
     public static double getTotalSum() {
@@ -370,20 +364,20 @@ public class DataProvider {
     }
 
     private void createTransaction(Calendar cal) {
-        
-        if(movies.isEmpty()) {
+
+        if (movies.isEmpty()) {
             // nothing to do
             return;
         }
- 
+
         // Country
         Object[] array = countryToCities.keySet().toArray();
-        int i = (int) (Math.random() * (array.length - 1));
+        int i = rand.nextInt(array.length - 1);
         String country = array[i].toString();
 
-        for (Movie m : movies) {
+        movies.stream().forEach((m) -> {
             m.reCalculateSortScore(cal);
-        }
+        });
 
         Collections.sort(movies, new Comparator<Movie>() {
             @Override
@@ -417,7 +411,6 @@ public class DataProvider {
             // System.out.println(skippedCount);
             return;
         }
-        String title = movies.get(randomIndex).title;
 
         // Seats
         int seats = (int) (1 + rand.nextDouble() * 3);
@@ -425,11 +418,10 @@ public class DataProvider {
         // Price (approx. USD)
         double price = (double) (seats * (6 + (rand.nextDouble() * 3)));
 
-        transactions.addTransaction(cal, country, city, theater, room, title,
-                seats, price);
+        final String title = movies.get(randomIndex).title;
+        transactions.addTransaction(cal, country, city, theater, room, title, seats, price);
 
         // revenue.add(cal.getTime(), title, price);
-
     }
 
     public IndexedContainer getRevenueForTitle(String title) {
@@ -462,7 +454,7 @@ public class DataProvider {
             }
         }
 
-        revenue.sort(new Object[] { "timestamp" }, new boolean[] { true });
+        revenue.sort(new Object[]{"timestamp"}, new boolean[]{true});
         return revenue;
     }
 
@@ -477,8 +469,9 @@ public class DataProvider {
 
             String title = item.getItemProperty("Title").getValue().toString();
 
-            if (title == null || "".equals(title))
+            if (title == null || "".equals(title)) {
                 continue;
+            }
 
             Item i = revenue.getItem(title);
             if (i == null) {
@@ -490,19 +483,18 @@ public class DataProvider {
             i.getItemProperty("Revenue").setValue(current);
         }
 
-        revenue.sort(new Object[] { "Revenue" }, new boolean[] { false });
+        revenue.sort(new Object[]{"Revenue"}, new boolean[]{false});
 
         // TODO sometimes causes and IndexOutOfBoundsException
         if (revenue.getItemIds().size() > 10) {
             // Truncate to top 10 items
-            List<Object> remove = new ArrayList<Object>();
-            for (Object id : revenue
-                    .getItemIds(10, revenue.getItemIds().size())) {
+            List<Object> remove = new ArrayList<>();
+            revenue.getItemIds(10, revenue.getItemIds().size()).stream().forEach((id) -> {
                 remove.add(id);
-            }
-            for (Object id : remove) {
+            });
+            remove.stream().forEach((id) -> {
                 revenue.removeItem(id);
-            }
+            });
         }
 
         return revenue;
@@ -510,8 +502,9 @@ public class DataProvider {
 
     public static Movie getMovieForTitle(String title) {
         for (Movie movie : movies) {
-            if (movie.title.equals(title))
+            if (movie.title.equals(title)) {
                 return movie;
+            }
         }
         return null;
     }
