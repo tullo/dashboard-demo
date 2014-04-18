@@ -15,17 +15,17 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vaadin.data.Item;
 import com.vaadin.data.util.IndexedContainer;
-import com.vaadin.server.VaadinRequest;
-import com.vaadin.util.CurrentInstance;
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.FileTime;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -35,10 +35,16 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class DataProvider {
+
+    private static final String FILE_NAME = "movies.txt";
+    private static final String MOVIES_URL = "http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters.json";
 
     private static final Random rand = new Random();
 
@@ -82,16 +88,16 @@ public class DataProvider {
     private TransactionsContainer transactions;
     private static double totalSum = 0;
 
-    
     public static void reseed() {
         rand.setSeed(1L);
     }
 
     /**
      * Initialize the data for this application.
+     *
      * @throws java.io.IOException
      */
-    public DataProvider() throws IOException {
+    public DataProvider() {
         reseed();
         loadMoviesData();
         loadTheaterData();
@@ -167,121 +173,134 @@ public class DataProvider {
         return movies;
     }
 
-    /**
-     * Initialize the list of movies playing in theaters currently. Uses the
-     * Rotten Tomatoes API to get the list. The result is cached to a local file
-     * for 24h (daily limit of API calls is 10,000).
-     */
-    private static void loadMoviesData() {
+    private static String readMoviesFromCache(Path path) throws IOException {
+        return new String(Files.readAllBytes(path));
+    }
 
-        File cache;
-
-        // TODO why does this sometimes return null?
-        VaadinRequest vaadinRequest = CurrentInstance.get(VaadinRequest.class);
-        if (vaadinRequest == null) {
-            // PANIC!!!
-            cache = new File("movies.txt");
-        } else {
-            File baseDirectory = vaadinRequest.getService().getBaseDirectory();
-            cache = new File(baseDirectory + "/movies.txt");
+    private static JsonObject toJsonObject(String jsonText) throws IOException {
+        JsonElement jelement = new JsonParser().parse(jsonText.toString());
+        return jelement.getAsJsonObject();
+    }
+    
+    private static String readMoviesFromServiceProvider(String url) throws IOException {
+        StringBuilder sb = new StringBuilder(2000);
+        try ( // try-with-resources
+            InputStream is = new URL(url).openStream();
+            InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
+            BufferedReader reader = new BufferedReader(isr)) {
+            reader.lines().forEach(line -> sb.append(line));
         }
+        return sb.toString();
+    }
 
-        JsonObject json = null;
+    /**
+     * Initialize the list of movies playing in theaters currently. Uses a
+     * stored response from the Rotten Tomatoes API for ensuring the same data
+     * when testing. The response is cached in a local file for 24h (daily limit
+     * of API calls is 10,000).
+     */
+    static void loadMoviesData() {
+        
+        long oneDayInMillis = 1000 * 60 * 60 * 24;
+        
+        String cachedJsonTxt = null;
+        JsonObject jsonObj = null;
+
         try {
-            // TODO check for internet connection also, and use the cache anyway
-            // if no connection is available
-            if (cache.exists()
-                    && System.currentTimeMillis() < cache.lastModified() + 1000
-                    * 60 * 60 * 24) {
-                json = readJsonFromFile(cache);
+            System.out.println("*****" + cacheLocationPath().toAbsolutePath());
+            FileTime now = FileTime.fromMillis(System.currentTimeMillis());
+            FileTime lastMod = Files.getLastModifiedTime(cacheLocationPath());
+            FileTime cacheTimeout = FileTime.fromMillis(lastMod.toMillis() + oneDayInMillis);
+
+            if (cacheHasExpired(cacheTimeout, now)) {
+                // cache expired
+                cachedJsonTxt = fetchAndCacheMovies();
             } else {
-                // Get an API key from http://developer.rottentomatoes.com
-                String apiKey = System.getProperty("rottentomatoes_apikey", "xxxxxxxxxxxxxxxxxxx");
-                json = readJsonFromUrl("http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters.json?page_limit=30&apikey=" + apiKey);
-                // Store in cache
-                try (FileWriter fileWriter = new FileWriter(cache)) {
-                    fileWriter.write(json.toString());
+                cachedJsonTxt = readMoviesFromCache(cacheLocationPath());
+                if (cachedJsonTxt.isEmpty()) {
+                    cachedJsonTxt = fetchAndCacheMovies();
                 }
             }
+            jsonObj = toJsonObject(cachedJsonTxt);
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (URISyntaxException ex) {
+            Logger.getLogger(DataProvider.class.getName()).log(Level.SEVERE, null, ex);
         }
 
-        if (json == null) {
+        if (jsonObj == null) {
             return;
         }
 
         JsonArray moviesJson;
         movies.clear();
-        moviesJson = json.getAsJsonArray("movies");
+        moviesJson = jsonObj.getAsJsonArray("movies");
         for (int i = 0; i < moviesJson.size(); i++) {
             JsonObject movieJson = moviesJson.get(i).getAsJsonObject();
             JsonObject posters = movieJson.get("posters").getAsJsonObject();
-            if (!posters.get("profile").getAsString()
-                    .contains("poster_default")) {
-                Movie movie = new Movie(movieJson.get("title").getAsString(),
-                        movieJson.get("synopsis").getAsString(), posters.get(
-                                "profile").getAsString(), posters.get(
-                                "detailed").getAsString(), movieJson.get(
-                                "release_dates").getAsJsonObject(), movieJson
-                        .get("ratings").getAsJsonObject());
-                movies.add(movie);
+            String profile = posters.get("profile").getAsString();
+            if (!profile.contains("poster_default")) {
+                String detailed = posters.get("detailed").getAsString();
+                movies.add(populateMovie(movieJson, profile, detailed));
             }
         }
     }
 
-    /* JSON utility method */
-    private static JsonObject readJsonFromUrl(String url) throws IOException {
-        
-        StringBuilder jsonText = new StringBuilder(2000);
-        try ( // try-with-resources
-            InputStream is = new URL(url).openStream();
-            InputStreamReader isr = new InputStreamReader(is, Charset.forName("UTF-8"))
-            BufferedReader reader = new BufferedReader(isr)
-        ) {
-            reader.lines().forEach(line -> jsonText.append(line));
-        }
-        JsonElement jelement = new JsonParser().parse(jsonText);
-        JsonObject jobject = jelement.getAsJsonObject();
-        return jobject;
+    private static Movie populateMovie(JsonObject obj, String profile, String detailed) {
+        Movie movie = new Movie(
+                obj.get("title").getAsString(),
+                obj.get("synopsis").getAsString(), 
+                profile, detailed,
+                obj.get("release_dates").getAsJsonObject(),
+                obj.get("ratings").getAsJsonObject());
+        return movie;
     }
-
-    /* JSON utility method */
-    private static JsonObject readJsonFromFile(File path) throws IOException {
-        StringBuilder jsonText = new StringBuilder(2000);
-        try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
-            reader.lines().forEach(line -> fileData.append(line));
-        }
-        JsonElement jelement = new JsonParser().parse(jsonText);
-        JsonObject jobject = jelement.getAsJsonObject();
-        return jobject;
-    }
-
+    
     /**
-     * Parse the list of countries and cities
+     * Fetches movie data via Rotten Tomatoes API and stores the response
+     * locally.
+     *
+     * The Rotten Tomatoes daily limit of API calls is 10,000.
+     *
+     * @return response as JSON text
+     * @throws IOException
      */
-    private static HashMap<String, ArrayList<String>> loadTheaterData() throws IOException {
+    private static String fetchAndCacheMovies() throws IOException, URISyntaxException {
+        // Get an API key from http://developer.rottentomatoes.com
+        String apiKey = System.getProperty("rottentomatoes_apikey", "xxxxxxxxxxxxxxxxxxx");
+        String movies = readMoviesFromServiceProvider(MOVIES_URL + "?page_limit=30&apikey=" + apiKey);
+        Files.write(cacheLocationPath(), movies.getBytes(StandardCharsets.UTF_8));
+        return movies;
+    }
 
-        /* First, read the text file into a string */
-        StringBuilder fileData = new StringBuilder(2000); 
+    private static Path cacheLocationPath() throws URISyntaxException {
+        //DataProvider.class.getResource("/") => /WEB-INF/classes/
+        return Paths.get(DataProvider.class.getResource(FILE_NAME).toURI());
+    }
+
+    private static boolean cacheHasExpired(FileTime cacheTime, FileTime now) {
+        return 0 > cacheTime.compareTo(now);
+    }
+
+    /* Parse the list of countries and cities */
+    private static HashMap<String, ArrayList<String>> loadTheaterData() {
+
+        /* First, read the text file into a list of strings */
+        List<String> countryList = new LinkedList<>();
         try ( // try-with-resources
-            InputStream is = DataProvider.class.getResourceAsStream("cities.txt");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is))
-        ) {
-            reader.lines().forEach(line -> fileData.append(line));
+                InputStream is = DataProvider.class.getResourceAsStream("cities.txt");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+            reader.lines().forEach(line -> countryList.add(line));
+        } catch (IOException ex) {
+            Logger.getLogger(DataProvider.class.getName()).log(Level.SEVERE, null, ex);
         }
-        
-        String list = fileData.toString();
 
-        /*
-         * The list has rows with tab delimited values. We want the second (city
-         * name) and last (country name) values, and build a Map from that.
-         */
+        /* The list has rows with tab delimited values */
         countryToCities = new HashMap<>();
-        for (String line : list.split("\n")) {
+        for (String line : countryList) {
             String[] tabs = line.split("\t");
             String city = tabs[1];
-            String country = tabs[tabs.length - 2];
+            String country = tabs[6];
 
             if (!countryToCities.containsKey(country)) {
                 countryToCities.put(country, new ArrayList<>());
@@ -355,11 +374,7 @@ public class DataProvider {
             return;
         }
 
-        // Country
-        Object[] array = countryToCities.keySet().toArray();
-        int i = rand.nextInt(array.length - 1);
-        String country = array[i].toString();
-
+        // Movie sort scores
         movies.stream().forEach((m) -> {
             m.reCalculateSortScore(cal);
         });
@@ -371,13 +386,13 @@ public class DataProvider {
             }
         });
 
+        String country =  new RandomIterator<String>(countryToCities.keySet()).next();
         // City
         ArrayList<String> cities = countryToCities.get(country);
         String city = cities.get(0);
 
         // Theater
-        String theater = theaters.get((int) (rand.nextDouble() * (theaters
-                .size() - 1)));
+        String theater = theaters.get((int) (rand.nextDouble() * (theaters.size() - 1)));
 
         // Room
         String room = rooms.get((int) (rand.nextDouble() * (rooms.size() - 1)));
