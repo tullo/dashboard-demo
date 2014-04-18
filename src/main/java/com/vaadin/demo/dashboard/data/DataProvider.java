@@ -207,7 +207,6 @@ public class DataProvider {
         JsonObject jsonObj = null;
 
         try {
-            System.out.println("*****" + cacheLocationPath().toAbsolutePath());
             FileTime now = FileTime.fromMillis(System.currentTimeMillis());
             FileTime lastMod = Files.getLastModifiedTime(cacheLocationPath());
             FileTime cacheTimeout = FileTime.fromMillis(lastMod.toMillis() + oneDayInMillis);
