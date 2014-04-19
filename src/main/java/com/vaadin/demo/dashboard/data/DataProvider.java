@@ -188,7 +188,11 @@ public class DataProvider {
             InputStream is = new URL(url).openStream();
             InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
             BufferedReader reader = new BufferedReader(isr)) {
-            reader.lines().forEach(line -> sb.append(line));
+            String line = reader.readLine();
+            while (line != null) {
+                sb.append(line);
+                line = reader.readLine();
+            }
         }
         return sb.toString();
     }
@@ -287,9 +291,14 @@ public class DataProvider {
         /* First, read the text file into a list of strings */
         List<String> countryList = new LinkedList<>();
         try ( // try-with-resources
-                InputStream is = DataProvider.class.getResourceAsStream("cities.txt");
-                BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-            reader.lines().forEach(line -> countryList.add(line));
+            InputStream is = DataProvider.class.getResourceAsStream("cities.txt");
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is)))
+        {
+            String line = reader.readLine();
+            while (line != null) {
+                countryList.add(line);
+                line = reader.readLine();
+            }
         } catch (IOException ex) {
             Logger.getLogger(DataProvider.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -302,7 +311,7 @@ public class DataProvider {
             String country = tabs[6];
 
             if (!countryToCities.containsKey(country)) {
-                countryToCities.put(country, new ArrayList<>());
+                countryToCities.put(country, new ArrayList<String>());
             }
             countryToCities.get(country).add(city);
         }
@@ -374,9 +383,9 @@ public class DataProvider {
         }
 
         // Movie sort scores
-        movies.stream().forEach((m) -> {
-            m.reCalculateSortScore(cal);
-        });
+        for (Movie movie : movies) {
+            movie.reCalculateSortScore(cal);
+        }
 
         Collections.sort(movies, new Comparator<Movie>() {
             @Override
@@ -484,16 +493,15 @@ public class DataProvider {
 
         revenue.sort(new Object[]{"Revenue"}, new boolean[]{false});
 
-        // TODO sometimes causes and IndexOutOfBoundsException
         if (revenue.getItemIds().size() > 10) {
             // Truncate to top 10 items
             List<Object> remove = new ArrayList<>();
-            revenue.getItemIds(10, revenue.getItemIds().size()).stream().forEach((id) -> {
+            for (Object id : revenue.getItemIds(10, revenue.getItemIds().size())) {
                 remove.add(id);
-            });
-            remove.stream().forEach((id) -> {
+            }
+            for (Object id : remove) {
                 revenue.removeItem(id);
-            });
+            }
         }
 
         return revenue;

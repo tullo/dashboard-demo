@@ -220,9 +220,9 @@ public class DashboardUI extends UI {
 
         nav = new Navigator(this, content);
 
-        routes.keySet().stream().forEach((route) -> {
+        for (String route : routes.keySet()) {
             nav.addView(route, routes.get(route));
-        });
+        }
 
         helpManager.closeAll();
         removeStyleName("login");
@@ -275,8 +275,12 @@ public class DashboardUI extends UI {
                                 userName.setSizeUndefined();
                                 addComponent(userName);
 
-                                Command cmd = (MenuItem selectedItem) -> {
-                                    Notification.show("Not implemented in this demo");
+                                Command cmd = new Command() {
+                                    @Override
+                                    public void menuSelected(
+                                            MenuItem selectedItem) {
+                                        Notification.show("Not implemented in this demo");
+                                    }
                                 };
                                 MenuBar settings = new MenuBar();
                                 MenuItem settingsMenu = settings.addItem("",
